@@ -1,6 +1,6 @@
-import { MIN_BOOST } from "./constants";
+import { MAX_MASTER, MIN_BOOST } from "./constants";
 import { findFiberProps } from "./fiber";
-import { getBoost, getSettings, subscribeSettings } from "./settings";
+import { getBoost, getMaster, getSettings, subscribeSettings } from "./settings";
 import { createExtender } from "./slider-extender";
 
 /**
@@ -184,7 +184,18 @@ const createEngine = () => {
   const applyGain = (item: TTracked) => {
     if (!item.graph || !ctx) return;
 
-    const target = item.hostMuted ? 0 : getBoost(item.source.key) / 100;
+    // what Sharkord itself would have played: the boost once its own slider is
+    // at 100%, otherwise that slider's own value
+    const sourceGain =
+      item.hostVolume >= FULL_VOLUME
+        ? getBoost(item.source.key) / 100
+        : item.hostVolume;
+
+    // the master slider only scales voices; screen share and plugin audio keep
+    // their own volume, as Sharkord's own volume list does
+    const master = item.source.kind === "voice" ? getMaster() / 100 : 1;
+
+    const target = item.hostMuted ? 0 : sourceGain * master;
 
     item.graph.gain.gain.setTargetAtTime(
       target,
@@ -284,9 +295,13 @@ const createEngine = () => {
   const refresh = (item: TTracked) => {
     const stream = nativeSrcObject(item.el);
     // the boost only applies while Sharkord itself is at 100%
+    const boosted =
+      getBoost(item.source.key) > MIN_BOOST && item.hostVolume >= FULL_VOLUME;
+    // a master below 100% has to take the stream over even when nothing is
+    // boosted, or voices that never left 100% would ignore it
+    const scaled = item.source.kind === "voice" && getMaster() < MAX_MASTER;
     const wantsGraph =
-      getBoost(item.source.key) > MIN_BOOST &&
-      item.hostVolume >= FULL_VOLUME &&
+      (boosted || scaled) &&
       stream instanceof MediaStream &&
       stream.getAudioTracks().length > 0;
 

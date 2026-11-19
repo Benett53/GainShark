@@ -2,6 +2,7 @@ import { PluginSlot } from "@sharkord/plugin-sdk";
 import type { TPluginComponentsMapBySlotId } from "@sharkord/plugin-sdk/client";
 import { PLUGIN_ID } from "./constants";
 import { getEngine } from "./engine";
+import { MasterVolumeControl } from "./ui/master-volume";
 import { SettingsPage } from "./ui/settings-page";
 
 const engine = getEngine();
@@ -28,6 +29,7 @@ syncEngine();
 
 const components: TPluginComponentsMapBySlotId = {
   [PluginSlot.USER_SETTINGS]: [SettingsPage],
+  [PluginSlot.TOPBAR_RIGHT]: [MasterVolumeControl],
 };
 
 export { components };

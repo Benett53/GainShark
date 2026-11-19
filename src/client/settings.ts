@@ -1,4 +1,10 @@
-import { MAX_BOOST, MIN_BOOST, STORAGE_KEY } from "./constants";
+import {
+  MAX_BOOST,
+  MAX_MASTER,
+  MIN_BOOST,
+  MIN_MASTER,
+  STORAGE_KEY,
+} from "./constants";
 
 /**
  * Per-browser boost settings, stored next to Sharkord's own volume settings
@@ -10,19 +16,30 @@ type TSettings = {
   boosts: Record<string, number>;
   /** run boosted audio through a limiter so it does not clip */
   limiter: boolean;
+  /**
+   * one percentage that scales every voice down together, 100 by default.
+   * It never changes the per-user volumes, only what reaches the speakers.
+   */
+  master: number;
 };
 
-const DEFAULT_SETTINGS: TSettings = { boosts: {}, limiter: true };
+const DEFAULT_SETTINGS: TSettings = { boosts: {}, limiter: true, master: 100 };
 
 const clampBoost = (value: number) =>
   Math.min(MAX_BOOST, Math.max(MIN_BOOST, Math.round(value)));
 
-const load = (): TSettings => {
+const clampMaster = (value: number) =>
+  Math.min(MAX_MASTER, Math.max(MIN_MASTER, Math.round(value)));
+
+/**
+ * Turns whatever is in storage into settings. Anything missing or malformed
+ * falls back to its default, so a record written by an older version, or by a
+ * version that never had a master slider, keeps working.
+ */
+const parseSettings = (raw: string | null): TSettings => {
+  if (!raw) return DEFAULT_SETTINGS;
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-
-    if (!raw) return DEFAULT_SETTINGS;
-
     const parsed = JSON.parse(raw) as Partial<TSettings>;
     const boosts: Record<string, number> = {};
 
@@ -40,11 +57,17 @@ const load = (): TSettings => {
         typeof parsed.limiter === "boolean"
           ? parsed.limiter
           : DEFAULT_SETTINGS.limiter,
+      master:
+        typeof parsed.master === "number" && Number.isFinite(parsed.master)
+          ? clampMaster(parsed.master)
+          : DEFAULT_SETTINGS.master,
     };
   } catch {
     return DEFAULT_SETTINGS;
   }
 };
+
+const load = (): TSettings => parseSettings(localStorage.getItem(STORAGE_KEY));
 
 let state: TSettings = load();
 const listeners = new Set<() => void>();
@@ -93,6 +116,16 @@ const resetAllBoosts = () => commit({ ...state, boosts: {} });
 
 const setLimiter = (limiter: boolean) => commit({ ...state, limiter });
 
+const getMaster = () => state.master;
+
+const setMaster = (value: number) => {
+  const master = clampMaster(value);
+
+  if (state.master === master) return;
+
+  commit({ ...state, master });
+};
+
 // keep several open tabs in sync
 window.addEventListener("storage", (event) => {
   if (event.key !== STORAGE_KEY) return;
@@ -103,10 +136,13 @@ window.addEventListener("storage", (event) => {
 
 export {
   getBoost,
+  getMaster,
   getSettings,
+  parseSettings,
   resetAllBoosts,
   setBoost,
   setLimiter,
+  setMaster,
   subscribeSettings,
 };
 export type { TSettings };
